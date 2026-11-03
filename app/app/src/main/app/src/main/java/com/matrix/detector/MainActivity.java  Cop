@@ -1,0 +1,180 @@
+
+package com.matrix.detector;
+
+import android.app.Activity;
+import android.os.Bundle;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Color;
+import android.view.View;
+import android.view.Gravity;
+import android.widget.*;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import java.util.Locale;
+
+public class MainActivity extends Activity implements SensorEventListener {
+
+    SensorManager sensorManager;
+    Sensor magneticSensor;
+    TextView status, reading, info;
+    RadarView radar;
+    boolean scanning = false;
+    float magneticValue = 0;
+
+    @Override
+    public void onCreate(Bundle b) {
+        super.onCreate(b);
+
+        sensorManager = (SensorManager)
+            getSystemService(SENSOR_SERVICE);
+
+        magneticSensor = sensorManager.getDefaultSensor(
+            Sensor.TYPE_MAGNETIC_FIELD);
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setGravity(Gravity.CENTER);
+        layout.setPadding(24, 24, 24, 24);
+        layout.setBackgroundColor(Color.rgb(3, 10, 8));
+
+        TextView title = new TextView(this);
+        title.setText("MATRIX DETECTOR");
+        title.setTextColor(Color.GREEN);
+        title.setTextSize(27);
+        title.setGravity(Gravity.CENTER);
+        layout.addView(title);
+
+        status = new TextView(this);
+        status.setText("SISTEMA EN ESPERA");
+        status.setTextColor(Color.WHITE);
+        status.setTextSize(16);
+        status.setGravity(Gravity.CENTER);
+        layout.addView(status);
+
+        radar = new RadarView(this);
+        layout.addView(radar,
+            new LinearLayout.LayoutParams(-1, 300));
+
+        reading = new TextView(this);
+        reading.setText("0.0 µT");
+        reading.setTextColor(Color.GREEN);
+        reading.setTextSize(32);
+        reading.setGravity(Gravity.CENTER);
+        layout.addView(reading);
+
+        info = new TextView(this);
+        info.setText("Sensor magnético");
+        info.setTextColor(Color.LTGRAY);
+        info.setGravity(Gravity.CENTER);
+        layout.addView(info);
+
+        Button start = new Button(this);
+        start.setText("INICIAR EXPLORACIÓN");
+        layout.addView(start);
+
+        Button stop = new Button(this);
+        stop.setText("DETENER");
+        layout.addView(stop);
+
+        start.setOnClickListener(v -> {
+            if (magneticSensor == null) {
+                status.setText("SENSOR NO DISPONIBLE");
+                return;
+            }
+
+            scanning = true;
+            sensorManager.registerListener(
+                this, magneticSensor,
+                SensorManager.SENSOR_DELAY_UI);
+            status.setText("EXPLORANDO...");
+        });
+
+        stop.setOnClickListener(v -> {
+            scanning = false;
+            sensorManager.unregisterListener(this);
+            status.setText("EXPLORACIÓN DETENIDA");
+        });
+
+        setContentView(layout);
+
+        if (magneticSensor == null) {
+            info.setText("Este celular no tiene sensor magnético");
+        }
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        if (!scanning) return;
+
+        float x = event.values[0];
+        float y = event.values[1];
+        float z = event.values[2];
+
+        magneticValue = (float)Math.sqrt(
+            x*x + y*y + z*z);
+
+        reading.setText(String.format(
+            Locale.US, "%.1f µT", magneticValue));
+
+        radar.invalidate();
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        scanning = false;
+        sensorManager.unregisterListener(this);
+    }
+
+    class RadarView extends View {
+        Paint p = new Paint(3);
+
+        RadarView(Activity context) {
+            super(context);
+        }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            super.onDraw(c);
+
+            float cx = getWidth()/2f;
+            float cy = getHeight()/2f;
+            float radius = Math.min(cx, cy) - 15;
+
+            p.setColor(Color.rgb(0, 35, 15));
+            c.drawColor(Color.rgb(3, 10, 8));
+
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(2);
+            p.setColor(Color.GREEN);
+
+            for (int i = 1; i <= 4; i++) {
+                c.drawCircle(cx, cy,
+                    radius*i/4f, p);
+            }
+
+            c.drawLine(cx-radius, cy, cx+radius, cy, p);
+            c.drawLine(cx, cy-radius, cx, cy+radius, p);
+
+            p.setStyle(Paint.Style.FILL);
+            p.setTextSize(18);
+            p.setColor(Color.GREEN);
+            c.drawText("MATRIX SCANNER",
+                cx-75, cy+radius+5, p);
+
+            if (scanning) {
+                p.setColor(Color.GREEN);
+                float dot = Math.min(
+                    radius-10, magneticValue);
+                c.drawCircle(cx+dot/2,
+                    cy-25, 9, p);
+            }
+        }
+    }
+}
